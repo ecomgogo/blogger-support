@@ -1,4 +1,5 @@
 import { router, publicProcedure } from "../init";
+import { authRouter } from "./auth";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -8,6 +9,7 @@ export const appRouter = router({
       status: "ok",
       timestamp: Date.now(),
     })),
+  auth: authRouter,
 });
 
 export type AppRouter = typeof appRouter;
