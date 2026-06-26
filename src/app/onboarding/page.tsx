@@ -39,8 +39,13 @@ export default function OnboardingPage() {
         {error || data?.error ? (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
             <p className="text-sm text-destructive">
-              {data?.error ?? "Failed to load your blogs. Please try signing in again."}
+              {error?.message ?? data?.error ?? "Failed to load your blogs. Please try signing in again."}
             </p>
+            {error && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Code: {error.data?.code ?? "N/A"}
+              </p>
+            )}
             <Button
               variant="outline"
               className="mt-4"
