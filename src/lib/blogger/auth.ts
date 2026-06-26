@@ -19,10 +19,7 @@ export async function getValidAccessToken(tenantId: string): Promise<string | nu
     select: { googleRefreshToken: true, googleAccessToken: true, googleTokenExpiry: true },
   });
 
-  if (!tenant || !tenant.googleRefreshToken) return null;
-
-  const refreshToken = decrypt(tenant.googleRefreshToken);
-  if (!refreshToken) return null;
+  if (!tenant) return null;
 
   // Check if current access token is still valid (5 minute buffer)
   if (tenant.googleAccessToken && tenant.googleTokenExpiry) {
@@ -33,7 +30,10 @@ export async function getValidAccessToken(tenantId: string): Promise<string | nu
     }
   }
 
-  // Token expired — refresh it
+  // Access token expired or not set — try to refresh
+  if (!tenant.googleRefreshToken) return null;
+  const refreshToken = decrypt(tenant.googleRefreshToken);
+  if (!refreshToken) return null;
   try {
     const response = await fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
