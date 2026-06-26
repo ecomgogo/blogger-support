@@ -60,7 +60,16 @@ export default function EditorPage() {
   const [labelInput, setLabelInput] = useState("");
   const [publishedUrl, setPublishedUrl] = useState("");
   const [polishedText, setPolishedText] = useState<string | null>(null);
+  const [tone, setTone] = useState("professional");
+  const [keywords, setKeywords] = useState<{ keyword: string; score: number }[] | null>(null);
   const initializedRef = useRef(false);
+
+  // Additional AI mutations
+  const rewriteMutation = trpc.ai.rewrite.useMutation();
+  const expandMutation = trpc.ai.expand.useMutation();
+  const condenseMutation = trpc.ai.condense.useMutation();
+  const keywordsMutation = trpc.ai.suggestKeywords.useMutation();
+  const seoMutation = trpc.ai.generateSEO.useMutation();
 
   // Initialize from loaded data
   if (!initializedRef.current && articleData?.article && !isLoading) {
@@ -299,6 +308,144 @@ export default function EditorPage() {
           />
         </div>
       </div>
+
+      {/* AI Toolbox */}
+      {article.status === "Draft" && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3">
+          <span className="text-xs font-medium text-muted-foreground mr-2">AI Tools:</span>
+          {/* Tone selector + Rewrite */}
+          <select
+            className="h-8 rounded border bg-background px-2 text-xs"
+            value={tone}
+            onChange={(e) => setTone(e.target.value)}
+          >
+            {["professional", "casual", "formal", "humorous"].map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              const sel = window.getSelection()?.toString();
+              const text = sel || content || article.content;
+              try {
+                const r = await rewriteMutation.mutateAsync({ articleId: article.id, content: text, tone });
+                setPolishedText(r.result);
+              } catch {}
+            }}
+            disabled={rewriteMutation.isPending}
+          >
+            Rewrite
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              const sel = window.getSelection()?.toString();
+              const text = sel || content || article.content;
+              try {
+                const r = await expandMutation.mutateAsync({ articleId: article.id, content: text });
+                setPolishedText(r.result);
+              } catch {}
+            }}
+            disabled={expandMutation.isPending}
+          >
+            Expand
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              const sel = window.getSelection()?.toString();
+              const text = sel || content || article.content;
+              try {
+                const r = await condenseMutation.mutateAsync({ articleId: article.id, content: text });
+                setPolishedText(r.result);
+              } catch {}
+            }}
+            disabled={condenseMutation.isPending}
+          >
+            Condense
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              try {
+                const r = await keywordsMutation.mutateAsync({
+                  articleId: article.id,
+                  content: content || article.content,
+                });
+                try {
+                  setKeywords(JSON.parse(r.keywords));
+                } catch {
+                  setKeywords([{ keyword: r.keywords, score: 0 }]);
+                }
+              } catch {}
+            }}
+            disabled={keywordsMutation.isPending}
+          >
+            Keywords
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              seoMutation.mutate({
+                articleId: article.id,
+                content: content || article.content,
+              })
+            }
+            disabled={seoMutation.isPending}
+          >
+            SEO Meta
+          </Button>
+        </div>
+      )}
+
+      {/* Keywords panel */}
+      {keywords && keywords.length > 0 && (
+        <div className="mb-4 rounded-lg border p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium">Keyword Suggestions</span>
+            <button onClick={() => setKeywords(null)} className="text-xs text-muted-foreground">×</button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {keywords.map((k, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs dark:bg-blue-950/30">
+                {k.keyword}
+                <span className="text-muted-foreground">{k.score}/10</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SEO fields */}
+      {article.seoTitle && (
+        <div className="mb-4 space-y-2 rounded-lg border p-3">
+          <span className="text-xs font-medium">SEO Metadata</span>
+          <input
+            className="w-full border-0 bg-transparent text-sm outline-none"
+            value={article.seoTitle}
+            onChange={(e) => {
+              const val = e.target.value;
+              trpc.article.updateArticle.useMutation().mutate({
+                id: article.id,
+                ...{ seoTitle: val },
+              } as any);
+            }}
+            placeholder="SEO Title (max 60 chars)"
+          />
+          <textarea
+            className="w-full border-0 bg-transparent text-xs outline-none resize-none"
+            rows={2}
+            value={article.seoDescription ?? ""}
+            placeholder="Meta Description (max 160 chars)"
+          />
+        </div>
+      )}
 
       {/* Editor */}
       <div className="flex-1">

@@ -87,4 +87,120 @@ export const aiRouter = router({
 
       return { success: true };
     }),
+
+  /**
+   * Rewrite text in a specific tone.
+   */
+  rewrite: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string(), tone: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+
+      await prisma.article.updateMany({
+        where: { id: input.articleId, blog: { tenantId: ctx.tenantId } },
+        data: { status: "Processing" },
+      });
+
+      try {
+        const result = await aiService.rewrite(input.content, input.tone);
+        await deductCredit(ctx.tenantId, "rewrite", input.articleId);
+        return { result };
+      } catch (err) {
+        await prisma.article.updateMany({
+          where: { id: input.articleId },
+          data: { status: "Draft" },
+        });
+        throw err;
+      }
+    }),
+
+  /**
+   * Expand a paragraph with more detail.
+   */
+  expand: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      await prisma.article.updateMany({
+        where: { id: input.articleId, blog: { tenantId: ctx.tenantId } },
+        data: { status: "Processing" },
+      });
+
+      try {
+        const result = await aiService.expand(input.content);
+        await deductCredit(ctx.tenantId, "expand", input.articleId);
+        return { result };
+      } catch (err) {
+        await prisma.article.updateMany({
+          where: { id: input.articleId },
+          data: { status: "Draft" },
+        });
+        throw err;
+      }
+    }),
+
+  /**
+   * Condense a paragraph.
+   */
+  condense: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      await prisma.article.updateMany({
+        where: { id: input.articleId, blog: { tenantId: ctx.tenantId } },
+        data: { status: "Processing" },
+      });
+
+      try {
+        const result = await aiService.condense(input.content);
+        await deductCredit(ctx.tenantId, "condense", input.articleId);
+        return { result };
+      } catch (err) {
+        await prisma.article.updateMany({
+          where: { id: input.articleId },
+          data: { status: "Draft" },
+        });
+        throw err;
+      }
+    }),
+
+  /**
+   * Suggest SEO keywords for the article.
+   */
+  suggestKeywords: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      const result = await aiService.suggestKeywords(input.content);
+      await deductCredit(ctx.tenantId, "suggestKeywords", input.articleId);
+      return { keywords: result };
+    }),
+
+  /**
+   * Generate SEO title and meta description.
+   */
+  generateSEO: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      const result = await aiService.generateSEO(input.content);
+      await deductCredit(ctx.tenantId, "generateSEO", input.articleId);
+
+      // Parse JSON result and save to article
+      try {
+        const seo = JSON.parse(result) as { title: string; description: string };
+        await prisma.article.updateMany({
+          where: { id: input.articleId, blog: { tenantId: ctx.tenantId } },
+          data: { seoTitle: seo.title, seoDescription: seo.description },
+        });
+        return { seoTitle: seo.title, seoDescription: seo.description };
+      } catch {
+        // If JSON parse fails, return raw result as description
+        await prisma.article.updateMany({
+          where: { id: input.articleId, blog: { tenantId: ctx.tenantId } },
+          data: { seoDescription: result },
+        });
+        return { seoTitle: null, seoDescription: result };
+      }
+    }),
 });
