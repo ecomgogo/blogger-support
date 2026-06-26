@@ -37,8 +37,14 @@ export function ArticleList({ blogId }: ArticleListProps) {
   });
 
   const [showImport, setShowImport] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("All");
 
   const articles = data?.articles ?? [];
+  const filtered = statusFilter === "All"
+    ? articles
+    : articles.filter((a) => a.status === statusFilter);
+
+  const STATUSES = ["All", "Draft", "Processing", "Review", "Published", "Archived"];
 
   if (isLoading) {
     return (
@@ -122,9 +128,33 @@ export function ArticleList({ blogId }: ArticleListProps) {
         </Button>
       )}
 
-      {articles.length === 0 ? (
+      {/* Status filter tabs */}
+      <div className="flex gap-1 flex-wrap">
+        {STATUSES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+              statusFilter === s
+                ? "bg-foreground text-background border-foreground"
+                : "bg-transparent text-muted-foreground border-muted hover:border-foreground/30"
+            }`}
+          >
+            {s}
+            {s !== "All" && (
+              <span className="ml-1 opacity-50">
+                ({articles.filter((a) => a.status === s).length})
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
         <div className="rounded-lg border p-8 text-center">
-          <p className="text-sm text-muted-foreground">No articles yet.</p>
+          <p className="text-sm text-muted-foreground">
+            {statusFilter === "All" ? "No articles yet." : `No ${statusFilter} articles.`}
+          </p>
           <Button
             className="mt-4"
             variant="outline"
@@ -137,7 +167,7 @@ export function ArticleList({ blogId }: ArticleListProps) {
         </div>
       ) : (
         <div className="space-y-2">
-          {articles.map((article) => (
+          {filtered.map((article) => (
             <div
               key={article.id}
               className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 cursor-pointer"

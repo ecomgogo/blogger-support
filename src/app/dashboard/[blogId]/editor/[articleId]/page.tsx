@@ -3,9 +3,10 @@
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { useAutoSave, SaveIndicator } from "@/components/editor/auto-save";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/articles/status-badge";
 import { trpc } from "@/trpc/react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, X, Send, ExternalLink } from "lucide-react";
+import { ArrowLeft, X, Send, ExternalLink, Archive, RotateCcw, Sparkles, Check, XCircle } from "lucide-react";
 import { useState, useCallback, useRef } from "react";
 
 export default function EditorPage() {
@@ -32,6 +33,11 @@ export default function EditorPage() {
     onSuccess: (data) => {
       utils.article.getArticle.invalidate({ id: params.articleId });
       setPublishedUrl(data.bloggerUrl);
+    },
+  });
+  const transitionStatus = trpc.article.transitionStatus.useMutation({
+    onSuccess: () => {
+      utils.article.getArticle.invalidate({ id: params.articleId });
     },
   });
 
@@ -132,30 +138,98 @@ export default function EditorPage() {
           <SaveIndicator status={status} />
         </div>
         <div className="flex items-center gap-2">
-          {(article.status === "Draft" || article.status === "Review") && (
+          <StatusBadge status={article.status} />
+          {/* Draft → Processing */}
+          {article.status === "Draft" && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => transitionStatus.mutate({ articleId: article.id, to: "Processing" })}
+                disabled={transitionStatus.isPending}
+              >
+                <Sparkles className="mr-1 h-4 w-4" />
+                Submit for AI
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => publishArticle.mutate({ articleId: article.id })}
+                disabled={publishArticle.isPending}
+              >
+                <Send className="mr-1 h-4 w-4" />
+                Publish
+              </Button>
+            </>
+          )}
+          {/* Processing → Review (placeholder for AI completion) */}
+          {article.status === "Processing" && (
             <Button
               size="sm"
-              onClick={() => publishArticle.mutate({ articleId: article.id })}
-              disabled={publishArticle.isPending}
+              variant="outline"
+              onClick={() => transitionStatus.mutate({ articleId: article.id, to: "Review" })}
+              disabled={transitionStatus.isPending}
             >
-              <Send className="mr-1 h-4 w-4" />
-              {publishArticle.isPending ? "Publishing..." : "Publish"}
+              <Check className="mr-1 h-4 w-4" />
+              Mark AI Complete
             </Button>
           )}
-          {article.status === "Published" && article.bloggerPostId && (
-            <span className="text-xs text-green-600 inline-flex items-center gap-1">
-              Published
+          {/* Review → Published / Draft */}
+          {article.status === "Review" && (
+            <>
+              <Button
+                size="sm"
+                onClick={() => publishArticle.mutate({ articleId: article.id })}
+                disabled={publishArticle.isPending}
+              >
+                <Check className="mr-1 h-4 w-4" />
+                Approve & Publish
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => transitionStatus.mutate({ articleId: article.id, to: "Draft" })}
+                disabled={transitionStatus.isPending}
+              >
+                <XCircle className="mr-1 h-4 w-4" />
+                Reject
+              </Button>
+            </>
+          )}
+          {/* Published → Archived */}
+          {article.status === "Published" && (
+            <>
               {publishedUrl && (
                 <a
                   href={publishedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground"
+                  className="text-xs text-green-600 inline-flex items-center gap-1 hover:underline"
                 >
-                  <ExternalLink className="h-3 w-3" />
+                  Live <ExternalLink className="h-3 w-3" />
                 </a>
               )}
-            </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => transitionStatus.mutate({ articleId: article.id, to: "Archived" })}
+                disabled={transitionStatus.isPending}
+              >
+                <Archive className="mr-1 h-4 w-4" />
+                Archive
+              </Button>
+            </>
+          )}
+          {/* Archived → Draft */}
+          {article.status === "Archived" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => transitionStatus.mutate({ articleId: article.id, to: "Draft" })}
+              disabled={transitionStatus.isPending}
+            >
+              <RotateCcw className="mr-1 h-4 w-4" />
+              Restore to Draft
+            </Button>
           )}
         </div>
       </div>

@@ -360,4 +360,66 @@ export const articleRouter = router({
 
       return { article };
     }),
+
+  /**
+   * Transition an article to a new status. Validates the transition
+   * against the allowed state machine transitions.
+   */
+  transitionStatus: authenticatedProcedure
+    .input(
+      z.object({
+        articleId: z.string(),
+        to: z.enum(["Draft", "Processing", "Review", "Published", "Archived"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const VALID_TRANSITIONS: Record<string, string[]> = {
+        Draft: ["Processing", "Review"],
+        Processing: ["Review"],
+        Review: ["Published", "Draft"],
+        Published: ["Archived"],
+        Archived: ["Draft"],
+      };
+
+      const article = await prisma.article.findFirst({
+        where: {
+          id: input.articleId,
+          blog: { tenantId: ctx.tenantId },
+        },
+        include: { blog: true },
+      });
+
+      if (!article) throw new Error("Article not found");
+
+      const allowed = VALID_TRANSITIONS[article.status];
+      if (!allowed || !allowed.includes(input.to)) {
+        throw new Error(
+          `Invalid transition: ${article.status} → ${input.to}`
+        );
+      }
+
+      // Handle Blogger side effects
+      if (input.to === "Archived" && article.bloggerPostId) {
+        const token = await getValidAccessToken(ctx.tenantId);
+        if (token) {
+          await deletePost(token, article.blog.bloggerId, article.bloggerPostId);
+        }
+      }
+
+      const updated = await prisma.article.update({
+        where: { id: article.id },
+        data: {
+          status: input.to,
+          ...(input.to === "Published"
+            ? { publishedAt: new Date() }
+            : {}),
+          ...(input.to === "Archived"
+            ? { bloggerPostId: null, publishedAt: null }
+            : {}),
+        },
+        include: { labels: { include: { label: true } } },
+      });
+
+      return { article: updated };
+    }),
 });
