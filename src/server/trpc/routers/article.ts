@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { router, authenticatedProcedure } from "../init";
 import { prisma } from "@/lib/prisma";
+import { getValidAccessToken } from "@/lib/blogger/auth";
+import {
+  createPost,
+  updatePost,
+  deletePost,
+  listPosts,
+  getPost,
+} from "@/lib/blogger/service";
 
 export const articleRouter = router({
   /**
@@ -168,5 +176,188 @@ export const articleRouter = router({
       });
 
       return { success: true };
+    }),
+
+  /**
+   * Publish an article to Blogger. Creates or updates the post,
+   * stores the bloggerPostId, syncs labels, and sets status to Published.
+   */
+  publishArticle: authenticatedProcedure
+    .input(z.object({ articleId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const article = await prisma.article.findFirst({
+        where: {
+          id: input.articleId,
+          blog: { tenantId: ctx.tenantId },
+          status: { in: ["Draft", "Review"] },
+        },
+        include: {
+          blog: true,
+          labels: { include: { label: true } },
+        },
+      });
+
+      if (!article) throw new Error("Article not found or not publishable");
+
+      const token = await getValidAccessToken(ctx.tenantId);
+      if (!token) throw new Error("No valid Blogger token");
+
+      const labelNames = article.labels.map((al) => al.label.name);
+      const postData = {
+        title: article.title,
+        content: article.content,
+        labels: labelNames.length > 0 ? labelNames : undefined,
+      };
+
+      let bloggerPostId: string;
+      let bloggerUrl: string;
+
+      if (article.bloggerPostId) {
+        // Update existing post
+        const post = await updatePost(token, article.blog.bloggerId, article.bloggerPostId, postData);
+        bloggerPostId = post.id;
+        bloggerUrl = post.url ?? "";
+      } else {
+        // Create new post
+        const post = await createPost(token, article.blog.bloggerId, postData);
+        bloggerPostId = post.id;
+        bloggerUrl = post.url ?? "";
+      }
+
+      const updated = await prisma.article.update({
+        where: { id: article.id },
+        data: {
+          bloggerPostId,
+          status: "Published",
+          publishedAt: new Date(),
+        },
+        include: { labels: { include: { label: true } } },
+      });
+
+      // Update blog post count
+      await prisma.blog.update({
+        where: { id: article.blogId },
+        data: { postCount: { increment: article.bloggerPostId ? 0 : 1 } },
+      });
+
+      return { article: updated, bloggerUrl };
+    }),
+
+  /**
+   * Unpublish an article — delete from Blogger, revert to Draft.
+   */
+  unpublishArticle: authenticatedProcedure
+    .input(z.object({ articleId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const article = await prisma.article.findFirst({
+        where: {
+          id: input.articleId,
+          blog: { tenantId: ctx.tenantId },
+          status: "Published",
+        },
+        include: { blog: true },
+      });
+
+      if (!article || !article.bloggerPostId) {
+        throw new Error("Article not found or not published");
+      }
+
+      const token = await getValidAccessToken(ctx.tenantId);
+      if (!token) throw new Error("No valid Blogger token");
+
+      await deletePost(token, article.blog.bloggerId, article.bloggerPostId);
+
+      const updated = await prisma.article.update({
+        where: { id: article.id },
+        data: {
+          bloggerPostId: null,
+          status: "Draft",
+          publishedAt: null,
+        },
+        include: { labels: { include: { label: true } } },
+      });
+
+      return { article: updated };
+    }),
+
+  /**
+   * Pull posts from Blogger that are not yet mirrored locally.
+   */
+  pullPosts: authenticatedProcedure
+    .input(z.object({ blogId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const blog = await prisma.blog.findFirst({
+        where: { id: input.blogId, tenantId: ctx.tenantId },
+      });
+      if (!blog) throw new Error("Blog not found");
+
+      const token = await getValidAccessToken(ctx.tenantId);
+      if (!token) throw new Error("No valid Blogger token");
+
+      const { posts } = await listPosts(token, blog.bloggerId);
+
+      // Get already-mirrored post IDs
+      const mirrored = await prisma.article.findMany({
+        where: {
+          blogId: blog.id,
+          bloggerPostId: { not: null },
+        },
+        select: { bloggerPostId: true },
+      });
+      const mirroredIds = new Set(
+        mirrored.map((m) => m.bloggerPostId).filter(Boolean) as string[]
+      );
+
+      const unmirrored = posts.filter((p) => !mirroredIds.has(p.id));
+
+      return { posts: unmirrored };
+    }),
+
+  /**
+   * Import a Blogger post as a local mirror.
+   */
+  importPost: authenticatedProcedure
+    .input(z.object({ blogId: z.string(), bloggerPostId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const blog = await prisma.blog.findFirst({
+        where: { id: input.blogId, tenantId: ctx.tenantId },
+      });
+      if (!blog) throw new Error("Blog not found");
+
+      const token = await getValidAccessToken(ctx.tenantId);
+      if (!token) throw new Error("No valid Blogger token");
+
+      const post = await getPost(token, blog.bloggerId, input.bloggerPostId);
+
+      const article = await prisma.article.create({
+        data: {
+          blogId: blog.id,
+          bloggerPostId: post.id,
+          title: post.title ?? "Untitled",
+          content: post.content ?? "",
+          status: "Published",
+          publishedAt: post.published ? new Date(post.published) : new Date(),
+        },
+        include: { labels: { include: { label: true } } },
+      });
+
+      // Import labels
+      if (post.labels) {
+        for (const name of post.labels) {
+          let label = await prisma.label.findFirst({
+            where: { tenantId: ctx.tenantId, name },
+          });
+          if (!label) {
+            label = await prisma.label.create({
+              data: { tenantId: ctx.tenantId, name },
+            });
+          }
+          await prisma.articleLabel.create({
+            data: { articleId: article.id, labelId: label.id },
+          });
+        }
+      }
+
+      return { article };
     }),
 });

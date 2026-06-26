@@ -5,7 +5,7 @@ import { useAutoSave, SaveIndicator } from "@/components/editor/auto-save";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, X, Send, ExternalLink } from "lucide-react";
 import { useState, useCallback, useRef } from "react";
 
 export default function EditorPage() {
@@ -28,10 +28,17 @@ export default function EditorPage() {
     onSuccess: () =>
       utils.article.getArticle.invalidate({ id: params.articleId }),
   });
+  const publishArticle = trpc.article.publishArticle.useMutation({
+    onSuccess: (data) => {
+      utils.article.getArticle.invalidate({ id: params.articleId });
+      setPublishedUrl(data.bloggerUrl);
+    },
+  });
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [labelInput, setLabelInput] = useState("");
+  const [publishedUrl, setPublishedUrl] = useState("");
   const initializedRef = useRef(false);
 
   // Initialize from loaded data
@@ -123,6 +130,33 @@ export default function EditorPage() {
             Back
           </Button>
           <SaveIndicator status={status} />
+        </div>
+        <div className="flex items-center gap-2">
+          {(article.status === "Draft" || article.status === "Review") && (
+            <Button
+              size="sm"
+              onClick={() => publishArticle.mutate({ articleId: article.id })}
+              disabled={publishArticle.isPending}
+            >
+              <Send className="mr-1 h-4 w-4" />
+              {publishArticle.isPending ? "Publishing..." : "Publish"}
+            </Button>
+          )}
+          {article.status === "Published" && article.bloggerPostId && (
+            <span className="text-xs text-green-600 inline-flex items-center gap-1">
+              Published
+              {publishedUrl && (
+                <a
+                  href={publishedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </span>
+          )}
         </div>
       </div>
 

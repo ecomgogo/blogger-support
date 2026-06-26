@@ -4,7 +4,8 @@ import { trpc } from "@/trpc/react";
 import { StatusBadge } from "./status-badge";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download } from "lucide-react";
+import { useState } from "react";
 
 interface ArticleListProps {
   blogId: string;
@@ -23,6 +24,19 @@ export function ArticleList({ blogId }: ArticleListProps) {
   const deleteArticle = trpc.article.deleteArticle.useMutation({
     onSuccess: () => utils.article.listArticles.invalidate({ blogId }),
   });
+  const pullPosts = trpc.article.pullPosts.useQuery(
+    { blogId },
+    { enabled: false }
+  );
+  const importPost = trpc.article.importPost.useMutation({
+    onSuccess: () => {
+      utils.article.listArticles.invalidate({ blogId });
+      utils.article.pullPosts.invalidate({ blogId });
+      setShowImport(false);
+    },
+  });
+
+  const [showImport, setShowImport] = useState(false);
 
   const articles = data?.articles ?? [];
 
@@ -51,6 +65,62 @@ export function ArticleList({ blogId }: ArticleListProps) {
           New Article
         </Button>
       </div>
+
+      {/* Import from Blogger */}
+      {showImport && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-sm">Import from Blogger</h3>
+            <Button variant="ghost" size="sm" onClick={() => { setShowImport(false); }}>
+              Cancel
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => pullPosts.refetch()}
+            disabled={pullPosts.isFetching}
+          >
+            {pullPosts.isFetching ? "Loading..." : "Refresh posts"}
+          </Button>
+          {pullPosts.data?.posts && pullPosts.data.posts.length > 0 && (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {pullPosts.data.posts.map((post) => (
+                <div key={post.id} className="flex items-center justify-between rounded border p-2 text-sm">
+                  <div className="truncate flex-1">
+                    <span className="font-medium">{post.title}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {post.updated ? new Date(post.updated).toLocaleDateString() : ""}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => importPost.mutate({ blogId, bloggerPostId: post.id })}
+                    disabled={importPost.isPending}
+                  >
+                    Import
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {pullPosts.data?.posts && pullPosts.data.posts.length === 0 && (
+            <p className="text-xs text-muted-foreground">All posts are already imported.</p>
+          )}
+        </div>
+      )}
+
+      {!showImport && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { setShowImport(true); pullPosts.refetch(); }}
+        >
+          <Download className="mr-1 h-4 w-4" />
+          Import from Blogger
+        </Button>
+      )}
 
       {articles.length === 0 ? (
         <div className="rounded-lg border p-8 text-center">
