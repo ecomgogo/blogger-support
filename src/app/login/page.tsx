@@ -1,51 +1,10 @@
-"use client";
+const SUPABASE_URL = "https://tuymzcezoiqknkunmsrc.supabase.co";
+const SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/blogger";
+const REDIRECT = "http://localhost:3000/auth/callback";
 
-import { Button } from "@/components/ui/button";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useState } from "react";
+const OAUTH_URL = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(REDIRECT)}&scopes=${encodeURIComponent(SCOPES)}`;
 
 export default function LoginPage() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSignIn() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const supabase = createSupabaseBrowserClient();
-
-      const { data, error: authError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          scopes: [
-            "https://www.googleapis.com/auth/userinfo.email",
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "https://www.googleapis.com/auth/blogger",
-          ].join(" "),
-        },
-      });
-
-      if (authError) {
-        setError(authError.message);
-        setLoading(false);
-        return;
-      }
-
-      // Force redirect instead of relying on popup
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        setError("No redirect URL returned. Please try again.");
-        setLoading(false);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-      setLoading(false);
-    }
-  }
-
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-6 rounded-lg border bg-card p-8 shadow-sm">
@@ -56,20 +15,12 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive text-center">
-            {error}
-          </div>
-        )}
-
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={handleSignIn}
-          disabled={loading}
+        <a
+          href={OAUTH_URL}
+          className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/80"
         >
-          {loading ? "Redirecting to Google..." : "Sign in with Google"}
-        </Button>
+          Sign in with Google
+        </a>
       </div>
     </main>
   );
