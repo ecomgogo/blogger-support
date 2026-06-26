@@ -1,49 +1,43 @@
 import { createServerClient } from "@supabase/ssr";
-import type { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 
 /**
- * Server-side Supabase client for use in tRPC procedures and server components.
- * Reads cookies from the request to authenticate the user session.
+ * Server-side Supabase client. When called without request context,
+ * uses empty cookies. Pass a request to read the session from cookies.
  */
-export function createSupabaseServerClient(cookieHeader?: string | null) {
+export function createSupabaseServerClient(request?: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !anonKey) {
-    throw new Error(
-      "Missing Supabase environment variables. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY"
-    );
+    throw new Error("Missing Supabase environment variables.");
   }
 
-  // Parse cookies from the Cookie header
-  const cookies = parseCookies(cookieHeader ?? "");
+  // Parse cookies from the request's Cookie header
+  const cookieEntries: { name: string; value: string }[] = [];
+
+  if (request) {
+    const cookieHeader = request.headers.get("cookie");
+    if (cookieHeader) {
+      cookieHeader.split(";").forEach((c) => {
+        const idx = c.indexOf("=");
+        if (idx > 0) {
+          cookieEntries.push({
+            name: c.substring(0, idx).trim(),
+            value: c.substring(idx + 1).trim(),
+          });
+        }
+      });
+    }
+  }
 
   return createServerClient(supabaseUrl, anonKey, {
     cookies: {
       getAll() {
-        return Object.entries(cookies).map(([name, value]) => ({
-          name,
-          value,
-        }));
+        return cookieEntries;
       },
-      setAll(cookiesToSet) {
-        // Server-side mutations can't easily set cookies on the response here
-        // Cookie setting is handled in the auth callback and proxy middleware
+      setAll() {
+        // No-op: cookie setting happens in the auth callback
       },
     },
   });
-}
-
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!cookieHeader) return result;
-
-  cookieHeader.split(";").forEach((cookie) => {
-    const [name, ...rest] = cookie.split("=");
-    if (name && rest.length > 0) {
-      result[name.trim()] = rest.join("=").trim();
-    }
-  });
-
-  return result;
 }
