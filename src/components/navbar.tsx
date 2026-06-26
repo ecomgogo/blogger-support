@@ -44,6 +44,9 @@ export function Navbar() {
           >
             Blogger Support
           </button>
+          <Button variant="ghost" size="sm" onClick={() => router.push("/settings")}>
+            Team
+          </Button>
           {blogs.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger>
