@@ -6,11 +6,15 @@ import { useState } from "react";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
-  const supabase = createSupabaseBrowserClient();
+  const [error, setError] = useState("");
 
   async function handleSignIn() {
     setLoading(true);
-    await supabase.auth.signInWithOAuth({
+    setError("");
+
+    const supabase = createSupabaseBrowserClient();
+
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
@@ -21,6 +25,12 @@ export default function LoginPage() {
         ].join(" "),
       },
     });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
+    // On success, browser redirects to Google — loading stays true
   }
 
   return (
@@ -32,13 +42,20 @@ export default function LoginPage() {
             Sign in with your Google account to connect your Blogger blogs.
           </p>
         </div>
+
+        {error && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive text-center">
+            {error}
+          </div>
+        )}
+
         <Button
           className="w-full"
           size="lg"
           onClick={handleSignIn}
           disabled={loading}
         >
-          {loading ? "Redirecting..." : "Sign in with Google"}
+          {loading ? "Redirecting to Google..." : "Sign in with Google"}
         </Button>
       </div>
     </main>
