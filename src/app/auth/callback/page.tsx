@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { trpcClient } from "@/trpc/client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -12,17 +13,15 @@ export default function AuthCallbackPage() {
     async function handleCallback() {
       const supabase = createSupabaseBrowserClient();
 
-      // Hash fragment contains tokens from Supabase Auth (PKCE flow)
       const hash = window.location.hash;
       if (hash) {
         const params = new URLSearchParams(hash.substring(1));
         const accessToken = params.get("access_token");
         const refreshToken = params.get("refresh_token");
         const providerToken = params.get("provider_token");
-        const providerRefreshToken = params.get("refresh_token"); // same as Supabase refresh token
+        const expiresIn = parseInt(params.get("expires_in") ?? "3600", 10);
 
         if (accessToken && refreshToken) {
-          // Set the session from the tokens
           const { error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -33,15 +32,24 @@ export default function AuthCallbackPage() {
             return;
           }
 
-          // Now store provider tokens via tRPC or redirect
-          // The tRPC context will create the tenant on next request
+          // Store Google provider token for Blogger API access
+          if (providerToken) {
+            try {
+              await trpcClient.auth.storeProviderTokens.mutate({
+                providerToken,
+                expiresIn,
+              });
+            } catch {
+              // Non-fatal: user can re-auth for Blogger access
+            }
+          }
+
           router.push("/onboarding");
           router.refresh();
           return;
         }
       }
 
-      // Fallback: try to get existing session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         router.push("/onboarding");

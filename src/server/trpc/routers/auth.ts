@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router, authenticatedProcedure } from "../init";
 import { prisma } from "@/lib/prisma";
+import { encrypt } from "@/lib/crypto";
 
 export const authRouter = router({
   /**
@@ -48,5 +49,33 @@ export const authRouter = router({
         plan: tenant.plan,
         createdAt: tenant.createdAt,
       };
+    }),
+
+  /**
+   * Store Google OAuth provider tokens in the tenant record.
+   */
+  storeProviderTokens: authenticatedProcedure
+    .input(
+      z.object({
+        providerToken: z.string(),
+        providerRefreshToken: z.string().optional(),
+        expiresIn: z.number().default(3600),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const expiresAt = Math.floor(Date.now() / 1000) + input.expiresIn;
+
+      await prisma.tenant.update({
+        where: { id: ctx.tenantId },
+        data: {
+          googleAccessToken: encrypt(input.providerToken),
+          ...(input.providerRefreshToken
+            ? { googleRefreshToken: encrypt(input.providerRefreshToken) }
+            : {}),
+          googleTokenExpiry: expiresAt,
+        },
+      });
+
+      return { success: true };
     }),
 });
