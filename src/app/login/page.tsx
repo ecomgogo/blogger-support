@@ -14,7 +14,11 @@ export default function LoginPage() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+        scopes: [
+          "https://www.googleapis.com/auth/userinfo.email",
+          "https://www.googleapis.com/auth/userinfo.profile",
+          "https://www.googleapis.com/auth/blogger",
+        ].join(" "),
       },
     });
   }
@@ -25,7 +29,7 @@ export default function LoginPage() {
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold tracking-tight">Blogger Support</h1>
           <p className="text-sm text-muted-foreground">
-            Sign in with your Google account to get started.
+            Sign in with your Google account to connect your Blogger blogs.
           </p>
         </div>
         <Button

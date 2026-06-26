@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { prisma } from "@/lib/prisma";
+import { encrypt } from "@/lib/crypto";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const next = searchParams.get("next") ?? "/onboarding";
 
   if (code) {
     const supabase = createServerClient(
@@ -16,20 +18,19 @@ export async function GET(request: Request) {
             return [];
           },
           setAll(cookiesToSet) {
-            // Cookies are set via the response below
+            // Will be set on the response
           },
         },
       }
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!error) {
-      // Create a response that sets the Supabase cookies and redirects
+    if (!error && data.session) {
       const response = NextResponse.redirect(`${origin}${next}`);
 
-      // Re-create the client to capture cookies to set on the response
-      const authClient = createServerClient(
+      // Set cookies on the response
+      const cookieClient = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
@@ -46,13 +47,46 @@ export async function GET(request: Request) {
         }
       );
 
-      // Exchange again to get the cookies on the response object
-      await authClient.auth.exchangeCodeForSession(code);
+      await cookieClient.auth.exchangeCodeForSession(code);
+
+      // Store Google tokens in the Tenant record
+      const providerToken = data.session.provider_token;
+      const providerRefreshToken = data.session.provider_refresh_token;
+      const userId = data.session.user.id;
+
+      if (providerToken && providerRefreshToken && userId) {
+        try {
+          // Find the tenant (created by tRPC context on first load)
+          let tenant = await prisma.tenant.findUnique({
+            where: { supabaseUserId: userId },
+          });
+
+          if (!tenant) {
+            tenant = await prisma.tenant.create({
+              data: { supabaseUserId: userId },
+            });
+          }
+
+          // Google access tokens expire in 3600s by default
+          const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+
+          await prisma.tenant.update({
+            where: { id: tenant.id },
+            data: {
+              googleAccessToken: encrypt(providerToken),
+              googleRefreshToken: encrypt(providerRefreshToken),
+              googleTokenExpiry: expiresAt,
+            },
+          });
+        } catch {
+          // Token storage failed — non-fatal, user can re-auth
+          console.error("Failed to store Google tokens for tenant");
+        }
+      }
 
       return response;
     }
   }
 
-  // Something went wrong — redirect to login
   return NextResponse.redirect(`${origin}/login`);
 }

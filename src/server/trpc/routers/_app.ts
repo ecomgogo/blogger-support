@@ -1,5 +1,6 @@
 import { router, publicProcedure } from "../init";
 import { authRouter } from "./auth";
+import { bloggerRouter } from "./blogger";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -10,6 +11,7 @@ export const appRouter = router({
       timestamp: Date.now(),
     })),
   auth: authRouter,
+  blogger: bloggerRouter,
 });
 
 export type AppRouter = typeof appRouter;

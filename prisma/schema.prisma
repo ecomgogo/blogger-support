@@ -11,7 +11,9 @@ datasource db {
 model Tenant {
   id                 String   @id @default(cuid())
   supabaseUserId     String   @unique
+  googleAccessToken  String?  // encrypted at rest
   googleRefreshToken String?  // encrypted at rest
+  googleTokenExpiry  Int?     // epoch seconds
   plan               String   @default("Free") // Free | Pro | Unlimited
   stripeCustomerId   String?
   createdAt          DateTime @default(now())
