@@ -4,6 +4,7 @@ import { bloggerRouter } from "./blogger";
 import { articleRouter } from "./article";
 import { aiRouter } from "./ai";
 import { teamRouter } from "./team";
+import { billingRouter } from "./billing";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -18,6 +19,7 @@ export const appRouter = router({
   article: articleRouter,
   ai: aiRouter,
   team: teamRouter,
+  billing: billingRouter,
 });
 
 export type AppRouter = typeof appRouter;

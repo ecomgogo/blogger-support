@@ -47,6 +47,9 @@ export function Navbar() {
           <Button variant="ghost" size="sm" onClick={() => router.push("/settings")}>
             Team
           </Button>
+          <Button variant="ghost" size="sm" onClick={() => router.push("/billing")}>
+            Billing
+          </Button>
           {blogs.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger>
