@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/react";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Your Blogs</h2>
           <Button size="sm" variant="outline" onClick={() => router.push("/onboarding")}>
+            <Plus className="mr-1 h-4 w-4" />
             Add Blog
           </Button>
         </div>
@@ -57,11 +59,15 @@ export default function DashboardPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {blogs.map((blog) => (
-              <div key={blog.id} className="rounded-lg border p-4 space-y-1">
+              <div
+                key={blog.id}
+                className="cursor-pointer rounded-lg border p-4 space-y-1 hover:border-primary/50 transition-colors"
+                onClick={() => router.push(`/dashboard/${blog.id}`)}
+              >
                 <h3 className="font-medium truncate">{blog.name}</h3>
                 <p className="text-sm text-muted-foreground truncate">{blog.url}</p>
                 <p className="text-xs text-muted-foreground">
-                  {blog.postCount} posts · Connected {new Date(blog.connectedAt).toLocaleDateString()}
+                  {blog.postCount} posts
                 </p>
               </div>
             ))}

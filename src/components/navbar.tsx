@@ -19,6 +19,9 @@ export function Navbar() {
   const { data: tenant, isLoading } = trpc.auth.me.useQuery(undefined, {
     retry: false,
   });
+  const { data: blogData } = trpc.blogger.getConnectedBlogs.useQuery(undefined, {
+    enabled: !!tenant,
+  });
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -26,13 +29,42 @@ export function Navbar() {
     router.refresh();
   }
 
+  const blogs = blogData?.blogs ?? [];
+
   return (
     <header className="sticky top-0 z-50 border-b bg-background">
       <div className="flex h-14 items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold tracking-tight">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push("/")}
+            className="text-lg font-semibold tracking-tight hover:opacity-80"
+          >
             Blogger Support
-          </span>
+          </button>
+          {blogs.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <Button variant="outline" size="sm">
+                  Blogs ({blogs.length})
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {blogs.map((blog) => (
+                  <DropdownMenuItem
+                    key={blog.id}
+                    onClick={() => router.push(`/dashboard/${blog.id}`)}
+                  >
+                    <div className="truncate">
+                      <span className="font-medium">{blog.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {blog.postCount} posts
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {isLoading ? (
@@ -41,9 +73,6 @@ export function Navbar() {
           <DropdownMenu>
             <DropdownMenuTrigger>
               <Button variant="ghost" size="sm" className="gap-2">
-                <span className="hidden sm:inline text-sm text-muted-foreground">
-                  {tenant.id.slice(0, 8)}...
-                </span>
                 <span className="text-sm font-medium capitalize">
                   {tenant.plan}
                 </span>
