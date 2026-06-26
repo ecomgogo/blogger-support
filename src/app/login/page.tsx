@@ -12,25 +12,38 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const supabase = createSupabaseBrowserClient();
+    try {
+      const supabase = createSupabaseBrowserClient();
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: [
-          "https://www.googleapis.com/auth/userinfo.email",
-          "https://www.googleapis.com/auth/userinfo.profile",
-          "https://www.googleapis.com/auth/blogger",
-        ].join(" "),
-      },
-    });
+      const { data, error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: [
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/blogger",
+          ].join(" "),
+        },
+      });
 
-    if (error) {
-      setError(error.message);
+      if (authError) {
+        setError(authError.message);
+        setLoading(false);
+        return;
+      }
+
+      // Force redirect instead of relying on popup
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        setError("No redirect URL returned. Please try again.");
+        setLoading(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
       setLoading(false);
     }
-    // On success, browser redirects to Google — loading stays true
   }
 
   return (
