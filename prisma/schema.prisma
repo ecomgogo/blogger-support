@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Tenant ───────────────────────────────────────────────
+
+model Tenant {
+  id                 String   @id @default(cuid())
+  supabaseUserId     String   @unique
+  googleRefreshToken String?  // encrypted at rest
+  plan               String   @default("Free") // Free | Pro | Unlimited
+  stripeCustomerId   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  blogs              Blog[]
+  members            Member[]
+  labels             Label[]
+  invitations        Invitation[]
+  creditTransactions CreditTransaction[]
+  credit             Credit?
+  subscription       Subscription?
+}
+
+// ─── Blog ─────────────────────────────────────────────────
+
+model Blog {
+  id              String   @id @default(cuid())
+  tenantId        String
+  bloggerId       String   // Google Blogger blog ID
+  name            String
+  url             String
+  postCount       Int      @default(0)
+  defaultLanguage String   @default("en")
+  connectedAt     DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  articles Article[]
+
+  @@index([tenantId])
+}
+
+// ─── Member ───────────────────────────────────────────────
+
+enum MemberRole {
+  Author
+  Editor
+  Reviewer
+}
+
+model Member {
+  id        String     @id @default(cuid())
+  tenantId  String
+  userId    String     // Supabase auth user ID
+  role      MemberRole @default(Author)
+  invitedAt DateTime   @default(now())
+  joinedAt  DateTime?
+
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignments  Article[]  @relation("ArticleAssignee")
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+}
+
+// ─── Article ──────────────────────────────────────────────
+
+enum ArticleStatus {
+  Draft
+  Processing
+  Review
+  Published
+  Archived
+}
+
+model Article {
+  id              String        @id @default(cuid())
+  blogId          String
+  bloggerPostId   String?       // null until first publish
+  title           String
+  content         String        @default("")
+  seoTitle        String?
+  seoDescription  String?
+  status          ArticleStatus @default(Draft)
+  assigneeId      String?
+  sourceArticleId String?       // for translations — points to parent article
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  publishedAt     DateTime?
+
+  blog         Blog           @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  assignee     Member?        @relation("ArticleAssignee", fields: [assigneeId], references: [id])
+  labels       ArticleLabel[]
+  translations Article[]      @relation("ArticleTranslation")
+  source       Article?       @relation("ArticleTranslation", fields: [sourceArticleId], references: [id])
+
+  @@index([blogId])
+  @@index([status])
+  @@index([assigneeId])
+}
+
+// ─── Label ────────────────────────────────────────────────
+
+model Label {
+  id             String  @id @default(cuid())
+  tenantId       String
+  name           String
+  seoDescription String?
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  articles ArticleLabel[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// ─── Article <-> Label join ───────────────────────────────
+
+model ArticleLabel {
+  articleId String
+  labelId   String
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  label   Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, labelId])
+}
+
+// ─── Credit ───────────────────────────────────────────────
+
+model Credit {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  amount       Int      @default(10) // remaining credits this period
+  monthlyLimit Int      @default(10)
+  periodStart  DateTime @default(now())
+  periodEnd    DateTime
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions  CreditTransaction[]
+}
+
+// ─── Credit Transaction ───────────────────────────────────
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  creditId    String
+  tenantId    String
+  articleId   String?
+  capability  String   // polish | rewrite | expand | condense | suggestKeywords | generateSEO | fullSEO | translate | generateAltText
+  creditsUsed Int
+  timestamp   DateTime @default(now())
+
+  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([creditId])
+  @@index([tenantId, timestamp])
+}
+
+// ─── Invitation ───────────────────────────────────────────
+
+enum InvitationStatus {
+  Pending
+  Accepted
+  Expired
+}
+
+model Invitation {
+  id        String           @id @default(cuid())
+  tenantId  String
+  email     String
+  role      MemberRole       @default(Author)
+  token     String           @unique
+  status    InvitationStatus @default(Pending)
+  createdAt DateTime         @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([token])
+}
+
+// ─── Subscription ─────────────────────────────────────────
+
+enum SubscriptionPlan {
+  Free
+  Pro
+  Unlimited
+}
+
+enum SubscriptionStatus {
+  Active
+  PastDue
+  Canceled
+  Incomplete
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  stripeSubscriptionId String?
+  plan                 SubscriptionPlan   @default(Free)
+  status               SubscriptionStatus @default(Active)
+  currentPeriodStart   DateTime           @default(now())
+  currentPeriodEnd     DateTime
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
