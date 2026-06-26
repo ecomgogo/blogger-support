@@ -203,4 +203,54 @@ export const aiRouter = router({
         return { seoTitle: null, seoDescription: result };
       }
     }),
+
+  /**
+   * Full SEO optimization for a target keyword.
+   */
+  fullSEO: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string(), keyword: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      await prisma.article.updateMany({
+        where: { id: input.articleId, blog: { tenantId: ctx.tenantId } },
+        data: { status: "Processing" },
+      });
+
+      try {
+        const result = await aiService.fullSEO(input.content, input.keyword);
+        await deductCredit(ctx.tenantId, "fullSEO", input.articleId);
+        return { result };
+      } catch (err) {
+        await prisma.article.updateMany({
+          where: { id: input.articleId },
+          data: { status: "Draft" },
+        });
+        throw err;
+      }
+    }),
+
+  /**
+   * Translate article to another language. Returns translated text
+   * that can be saved as a new article.
+   */
+  translate: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), content: z.string(), language: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      const result = await aiService.translate(input.content, input.language);
+      await deductCredit(ctx.tenantId, "translate", input.articleId);
+      return { result };
+    }),
+
+  /**
+   * Generate alt text for an image.
+   */
+  generateAltText: authenticatedProcedure
+    .input(z.object({ articleId: z.string(), imageBase64: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await checkCredits(ctx.tenantId);
+      const result = await aiService.generateAltText(input.imageBase64);
+      await deductCredit(ctx.tenantId, "generateAltText", input.articleId);
+      return { altText: result };
+    }),
 });

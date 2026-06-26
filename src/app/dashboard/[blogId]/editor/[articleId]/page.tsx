@@ -70,6 +70,12 @@ export default function EditorPage() {
   const condenseMutation = trpc.ai.condense.useMutation();
   const keywordsMutation = trpc.ai.suggestKeywords.useMutation();
   const seoMutation = trpc.ai.generateSEO.useMutation();
+  const fullSEOMutation = trpc.ai.fullSEO.useMutation();
+  const translateMutation = trpc.ai.translate.useMutation();
+  const altTextMutation = trpc.ai.generateAltText.useMutation();
+
+  const [seoKeyword, setSeoKeyword] = useState("");
+  const [translateLang, setTranslateLang] = useState("Spanish");
 
   // Initialize from loaded data
   if (!initializedRef.current && articleData?.article && !isLoading) {
@@ -400,6 +406,87 @@ export default function EditorPage() {
             disabled={seoMutation.isPending}
           >
             SEO Meta
+          </Button>
+          {/* Full SEO */}
+          <input
+            className="h-8 w-24 rounded border bg-background px-2 text-xs"
+            placeholder="Keyword"
+            value={seoKeyword}
+            onChange={(e) => setSeoKeyword(e.target.value)}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              if (!seoKeyword) return;
+              try {
+                const r = await fullSEOMutation.mutateAsync({
+                  articleId: article.id,
+                  content: content || article.content,
+                  keyword: seoKeyword,
+                });
+                setPolishedText(r.result);
+              } catch {}
+            }}
+            disabled={fullSEOMutation.isPending}
+          >
+            Full SEO
+          </Button>
+          {/* Translate */}
+          <select
+            className="h-8 rounded border bg-background px-2 text-xs"
+            value={translateLang}
+            onChange={(e) => setTranslateLang(e.target.value)}
+          >
+            {["Spanish","French","German","Chinese","Japanese","Portuguese","Arabic","Korean","Italian","Dutch","Russian","Hindi"].map((l) => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              try {
+                const r = await translateMutation.mutateAsync({
+                  articleId: article.id,
+                  content: content || article.content,
+                  language: translateLang,
+                });
+                setPolishedText(r.result);
+              } catch {}
+            }}
+            disabled={translateMutation.isPending}
+          >
+            Translate
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // Trigger image alt text via file input
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "image/*";
+              input.onchange = async (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async () => {
+                  const base64 = reader.result as string;
+                  try {
+                    await altTextMutation.mutateAsync({
+                      articleId: article.id,
+                      imageBase64: base64,
+                    });
+                  } catch {}
+                };
+                reader.readAsDataURL(file);
+              };
+              input.click();
+            }}
+            disabled={altTextMutation.isPending}
+          >
+            Alt Text
           </Button>
         </div>
       )}
