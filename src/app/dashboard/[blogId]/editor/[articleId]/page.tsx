@@ -4,6 +4,7 @@ import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { useAutoSave, SaveIndicator } from "@/components/editor/auto-save";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/articles/status-badge";
+import { DiffView } from "@/components/editor/diff-view";
 import { trpc } from "@/trpc/react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, X, Send, ExternalLink, Archive, RotateCcw, Sparkles, Check, XCircle } from "lucide-react";
@@ -40,11 +41,25 @@ export default function EditorPage() {
       utils.article.getArticle.invalidate({ id: params.articleId });
     },
   });
+  const polishMutation = trpc.ai.polish.useMutation();
+  const acceptPolish = trpc.ai.acceptPolish.useMutation({
+    onSuccess: () => {
+      utils.article.getArticle.invalidate({ id: params.articleId });
+      setPolishedText(null);
+    },
+  });
+  const rejectPolish = trpc.ai.rejectPolish.useMutation({
+    onSuccess: () => {
+      utils.article.getArticle.invalidate({ id: params.articleId });
+      setPolishedText(null);
+    },
+  });
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [labelInput, setLabelInput] = useState("");
   const [publishedUrl, setPublishedUrl] = useState("");
+  const [polishedText, setPolishedText] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
   // Initialize from loaded data
@@ -145,11 +160,23 @@ export default function EditorPage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => transitionStatus.mutate({ articleId: article.id, to: "Processing" })}
-                disabled={transitionStatus.isPending}
+                onClick={async () => {
+                  // Transition to Processing and call AI
+                  await transitionStatus.mutateAsync({ articleId: article.id, to: "Processing" });
+                  try {
+                    const result = await polishMutation.mutateAsync({
+                      articleId: article.id,
+                      content: content || article.content,
+                    });
+                    setPolishedText(result.polished);
+                  } catch {
+                    // AI failed — transitionStatus already rolled back in handler
+                  }
+                }}
+                disabled={transitionStatus.isPending || polishMutation.isPending}
               >
                 <Sparkles className="mr-1 h-4 w-4" />
-                Submit for AI
+                {polishMutation.isPending ? "Polishing..." : "Polish with AI"}
               </Button>
               <Button
                 size="sm"
@@ -281,6 +308,26 @@ export default function EditorPage() {
           onImagePaste={handleImagePaste}
         />
       </div>
+
+      {/* AI Diff View */}
+      {polishedText && article.status === "Processing" && (
+        <div className="mt-6">
+          <DiffView
+            original={content || article.content}
+            suggested={polishedText}
+            loading={acceptPolish.isPending || rejectPolish.isPending}
+            onAccept={async () => {
+              const newContent = polishedText;
+              await acceptPolish.mutateAsync({
+                articleId: article.id,
+                content: newContent,
+              });
+              setContent(newContent);
+            }}
+            onReject={() => rejectPolish.mutate({ articleId: article.id })}
+          />
+        </div>
+      )}
     </main>
   );
 }

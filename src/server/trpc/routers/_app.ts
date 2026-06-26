@@ -2,6 +2,7 @@ import { router, publicProcedure } from "../init";
 import { authRouter } from "./auth";
 import { bloggerRouter } from "./blogger";
 import { articleRouter } from "./article";
+import { aiRouter } from "./ai";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -14,6 +15,7 @@ export const appRouter = router({
   auth: authRouter,
   blogger: bloggerRouter,
   article: articleRouter,
+  ai: aiRouter,
 });
 
 export type AppRouter = typeof appRouter;

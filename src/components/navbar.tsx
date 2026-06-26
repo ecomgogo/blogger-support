@@ -22,6 +22,9 @@ export function Navbar() {
   const { data: blogData } = trpc.blogger.getConnectedBlogs.useQuery(undefined, {
     enabled: !!tenant,
   });
+  const { data: credits } = trpc.ai.getCredits.useQuery(undefined, {
+    enabled: !!tenant,
+  });
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -70,13 +73,19 @@ export function Navbar() {
         {isLoading ? (
           <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
         ) : tenant ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button variant="ghost" size="sm" className="gap-2">
-                <span className="text-sm font-medium capitalize">
-                  {tenant.plan}
-                </span>
-              </Button>
+          <div className="flex items-center gap-3">
+            {credits && (
+              <span className="text-xs text-muted-foreground">
+                {credits.remaining}/{credits.monthlyLimit} credits
+              </span>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <span className="text-sm font-medium capitalize">
+                    {tenant.plan}
+                  </span>
+                </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>
@@ -90,6 +99,7 @@ export function Navbar() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         ) : null}
       </div>
     </header>
