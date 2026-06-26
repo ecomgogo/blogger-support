@@ -1,19 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const deepseek = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY!,
+  baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+});
 
-export type AICapability =
-  | "polish"
-  | "rewrite"
-  | "expand"
-  | "condense"
-  | "suggestKeywords"
-  | "generateSEO"
-  | "fullSEO"
-  | "translate"
-  | "generateAltText";
+const MODEL = "deepseek-chat";
 
 const POLISH_PROMPT = `Polish the following text. Fix grammar, spelling, and punctuation errors. Improve sentence flow and readability. Do NOT change the meaning, tone, or voice. Return ONLY the polished text, no explanations.`;
 
@@ -36,102 +28,56 @@ const TRANSLATE_PROMPT = (lang: string) =>
 
 const ALT_TEXT_PROMPT = `You are shown an image. Generate a concise, descriptive, SEO-friendly alt text (max 125 chars). Return ONLY the alt text.`;
 
-/**
- * Route a capability to the appropriate model.
- * Primary: Claude for long-form, GPT-4o for structured/SEO.
- * Falls back to the other model on failure.
- */
+async function callDeepSeek(prompt: string, content: string): Promise<string> {
+  const response = await deepseek.chat.completions.create({
+    model: MODEL,
+    messages: [
+      { role: "system", content: prompt },
+      { role: "user", content },
+    ],
+    max_tokens: 4096,
+  });
+
+  return response.choices[0]?.message?.content ?? "";
+}
+
 export class AIService {
-  async #callClaude(prompt: string, content: string): Promise<string> {
-    const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      system: prompt,
-      messages: [{ role: "user", content }],
-    });
-
-    const text = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
-    return text;
-  }
-
-  async #callGPT4o(prompt: string, content: string): Promise<string> {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: prompt },
-        { role: "user", content },
-      ],
-      max_tokens: 4096,
-    });
-
-    return response.choices[0]?.message?.content ?? "";
-  }
-
-  /**
-   * Try primary model first, fall back to secondary on failure.
-   */
-  async #withFallback(
-    primary: "claude" | "gpt4o",
-    prompt: string,
-    content: string
-  ): Promise<string> {
-    try {
-      if (primary === "claude") return await this.#callClaude(prompt, content);
-      return await this.#callGPT4o(prompt, content);
-    } catch (err) {
-      console.error(`Primary model (${primary}) failed, trying fallback:`, err);
-      try {
-        if (primary === "claude") return await this.#callGPT4o(prompt, content);
-        return await this.#callClaude(prompt, content);
-      } catch (err2) {
-        console.error("Fallback model also failed:", err2);
-        throw new Error("AI service unavailable. Please try again later.");
-      }
-    }
-  }
-
-  // ─── Public API ──────────────────────────────────────────
-
   async polish(content: string): Promise<string> {
-    return this.#withFallback("claude", POLISH_PROMPT, content);
+    return callDeepSeek(POLISH_PROMPT, content);
   }
 
   async rewrite(content: string, tone: string): Promise<string> {
-    return this.#withFallback("claude", REWRITE_PROMPT(tone), content);
+    return callDeepSeek(REWRITE_PROMPT(tone), content);
   }
 
   async expand(content: string): Promise<string> {
-    return this.#withFallback("claude", EXPAND_PROMPT, content);
+    return callDeepSeek(EXPAND_PROMPT, content);
   }
 
   async condense(content: string): Promise<string> {
-    return this.#withFallback("claude", CONDENSE_PROMPT, content);
+    return callDeepSeek(CONDENSE_PROMPT, content);
   }
 
   async suggestKeywords(content: string): Promise<string> {
-    return this.#withFallback("gpt4o", SUGGEST_KEYWORDS_PROMPT, content);
+    return callDeepSeek(SUGGEST_KEYWORDS_PROMPT, content);
   }
 
   async generateSEO(content: string): Promise<string> {
-    return this.#withFallback("gpt4o", GENERATE_SEO_PROMPT, content);
+    return callDeepSeek(GENERATE_SEO_PROMPT, content);
   }
 
   async fullSEO(content: string, keyword: string): Promise<string> {
-    return this.#withFallback("gpt4o", FULL_SEO_PROMPT(keyword), content);
+    return callDeepSeek(FULL_SEO_PROMPT(keyword), content);
   }
 
   async translate(content: string, language: string): Promise<string> {
-    return this.#withFallback("gpt4o", TRANSLATE_PROMPT(language), content);
+    return callDeepSeek(TRANSLATE_PROMPT(language), content);
   }
 
   async generateAltText(imageBase64: string): Promise<string> {
-    // Alt text uses a vision model — try GPT-4o with vision, fallback to Claude
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+      const response = await deepseek.chat.completions.create({
+        model: MODEL,
         messages: [
           {
             role: "user",
@@ -145,7 +91,6 @@ export class AIService {
       });
       return response.choices[0]?.message?.content ?? "";
     } catch {
-      // Claude fallback (no vision in current setup, return generic)
       return "Image";
     }
   }
