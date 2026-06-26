@@ -8,7 +8,8 @@ const OAUTH_URL =
     "https://www.googleapis.com/auth/userinfo.email " +
     "https://www.googleapis.com/auth/userinfo.profile " +
     "https://www.googleapis.com/auth/blogger"
-  );
+  ) +
+  "&query=" + encodeURIComponent("access_type=offline&prompt=consent");
 
 export default function LoginPage() {
   return (
